@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>Ứng Dụng Nhận Biết Gia Cầm Qua Ảnh</title>
+  <style>
+    :root {
+      --bg-color: #f2e6d9;
+      --text-color: #4b3832;
+      --button-color: #8B4513;
+      --button-hover: #A0522D;
+      --result-color: #5c4033;
+      --border-color: #8B4513;
+    }
+    body.dark-mode {
+      --bg-color: #3e2723;
+      --text-color: #f5f5f5;
+      --button-color: #5d4037;
+      --button-hover: #6d4c41;
+      --result-color: #d7ccc8;
+      --border-color: #5d4037;
+    }
+    body {
+      font-family: "Times New Roman", serif;
+      background-color: var(--bg-color);
+      text-align: center;
+      padding-top: 50px;
+      color: var(--text-color);
+      transition: background-color 0.5s, color 0.5s;
+    }
+    h1 {
+      margin-bottom: 20px;
+    }
+    input[type="file"] {
+      margin-bottom: 20px;
+    }
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      font-family: "Times New Roman", serif;
+      background-color: var(--button-color);
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      margin: 5px;
+    }
+    button:hover {
+      background-color: var(--button-hover);
+    }
+    #preview {
+      margin-top: 30px;
+      max-width: 400px;
+      height: auto;
+      border: 2px solid var(--border-color);
+      padding: 10px;
+      background-color: white;
+    }
+    #result {
+      margin-top: 20px;
+      font-size: 20px;
+      color: var(--result-color);
+    }
+    table {
+      margin: 30px auto;
+      border-collapse: collapse;
+      width: 90%;
+      background-color: white;
+    }
+    th, td {
+      border: 1px solid var(--border-color);
+      padding: 10px;
+    }
+    th {
+      background-color: var(--button-color);
+      color: white;
+    }
+    td {
+      color: black;
+      text-align: center;
+    }
+    #loading {
+      display: none;
+      font-style: italic;
+      margin-top: 10px;
+      color: var(--result-color);
+    }
+    #totalPredictions {
+      margin-top: 10px;
+      font-weight: bold;
+      color: var(--result-color);
+    }
+    #progressBar {
+      width: 80%;
+      background-color: #ddd;
+      margin: 20px auto;
+      height: 20px;
+      border-radius: 10px;
+      overflow: hidden;
+      display: none;
+    }
+    #progressBarFill {
+      height: 100%;
+      width: 0%;
+      background-color: var(--button-color);
+      text-align: center;
+      color: white;
+      line-height: 20px;
+    }
+  </style>
+</head>
+
+<body>
+
+  <h1>Tải Ảnh Lên Để Dự Đoán</h1>
+
+  <input type="file" id="fileInput" onchange="previewImage()">
+  <br>
+  <button onclick="uploadImage()">Dự Đoán</button>
+  <button onclick="toggleDarkMode()">Chuyển Giao Diện</button>
+  <button onclick="clearHistory()">Xóa Lịch Sử</button>
+  <button onclick="downloadCSV()">Tải Lịch Sử (CSV)</button>
+
+  <div id="preview-container">
+    <img id="preview" src="#" alt="Xem Trước Ảnh" style="display: none;">
+  </div>
+
+  <div id="progressBar">
+    <div id="progressBarFill">0%</div>
+  </div>
+
+  <div id="loading">Đang xử lý... Vui lòng đợi.</div>
+
+  <div id="result">Chưa có kết quả.</div>
+  <div id="totalPredictions">Tổng số dự đoán: 0</div>
+
+  <h2>Lịch Sử Dự Đoán</h2>
+  <table id="historyTable">
+    <tr>
+      <th>STT</th>
+      <th>Ảnh</th>
+      <th>Kết quả</th>
+      <th>Thời gian</th>
+    </tr>
+  </table>
+
+  <script>
+    let historyCount = 0;
+    let historyData = [];
+
+    function previewImage() {
+      const input = document.getElementById('fileInput');
+      const preview = document.getElementById('preview');
+      const loading = document.getElementById('loading');
+      const result = document.getElementById('result');
+      const progressBar = document.getElementById('progressBar');
+      const progressBarFill = document.getElementById('progressBarFill');
+
+      const file = input.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          preview.src = e.target.result;
+          preview.style.display = "block";
+        }
+        reader.readAsDataURL(file);
+
+        loading.style.display = "none";
+        result.innerText = "Sẵn sàng dự đoán.";
+        progressBar.style.display = "none";
+        progressBarFill.style.width = "0%";
+        progressBarFill.innerText = "0%";
+      }
+    }
+
+    function uploadImage() {
+      const input = document.getElementById('fileInput');
+      const file = input.files[0];
+      const formData = new FormData();
+      formData.append('file', file);
+
+      document.getElementById('loading').style.display = "block";
+      document.getElementById('progressBar').style.display = "block";
+      updateProgress(10);
+
+      fetch('http://127.0.0.1:8000/predict/', {
+        method: 'POST',
+        body: formData
+      })
+      .then(response => {
+        updateProgress(50);
+        return response.json();
+      })
+      .then(data => {
+        document.getElementById('loading').style.display = "none";
+        document.getElementById('progressBarFill').style.width = "100%";
+        document.getElementById('progressBarFill').innerText = "Hoàn thành!";
+        document.getElementById('result').innerText = 'Kết quả: ' + data.prediction;
+        addHistory(data.prediction);
+      })
+      .catch(error => {
+        console.error('Lỗi:', error);
+        document.getElementById('loading').style.display = "none";
+        document.getElementById('result').innerText = 'Có lỗi xảy ra!';
+      });
+    }
+
+    function updateProgress(percent) {
+      const progressBarFill = document.getElementById('progressBarFill');
+      progressBarFill.style.width = percent + "%";
+      progressBarFill.innerText = percent + "%";
+    }
+
+    function addHistory(prediction) {
+      historyCount++;
+      const table = document.getElementById('historyTable');
+      const row = table.insertRow(-1);
+      const cell1 = row.insertCell(0);
+      const cell2 = row.insertCell(1);
+      const cell3 = row.insertCell(2);
+      const cell4 = row.insertCell(3);
+
+      cell1.innerText = historyCount;
+
+      const previewImg = document.createElement('img');
+      previewImg.src = document.getElementById('preview').src;
+      previewImg.style.width = "80px";
+      previewImg.style.height = "auto";
+      previewImg.style.border = "1px solid var(--border-color)";
+      cell2.appendChild(previewImg);
+
+      cell3.innerText = prediction;
+
+      const timeStr = new Date().toLocaleTimeString();
+      cell4.innerText = timeStr;
+
+      document.getElementById('totalPredictions').innerText = 'Tổng số dự đoán: ' + historyCount;
+
+      historyData.push({
+        no: historyCount,
+        prediction: prediction,
+        time: timeStr
+      });
+    }
+
+    function clearHistory() {
+      const table = document.getElementById('historyTable');
+      while (table.rows.length > 1) {
+        table.deleteRow(1);
+      }
+      historyCount = 0;
+      historyData = [];
+      document.getElementById('totalPredictions').innerText = 'Tổng số dự đoán: 0';
+    }
+
+    function downloadCSV() {
+      if (historyData.length === 0) {
+        alert("Không có lịch sử để tải!");
+        return;
+      }
+
+      let csvContent = "STT,Kết quả,Thời gian\n";
+      historyData.forEach(row => {
+        csvContent += `${row.no},${row.prediction},${row.time}\n`;
+      });
+
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.setAttribute("download", "lich_su_du_doan.csv");
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    function toggleDarkMode() {
+      document.body.classList.toggle('dark-mode');
+    }
+
+    // -----------------------------
+    // Tự động reload sau 5 phút idle
+    // -----------------------------
+    let idleTimer;
+
+    function resetIdleTimer() {
+      clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => {
+        alert("Không có hoạt động trong 5 phút. Trang sẽ tự động làm mới!");
+        location.reload();
+      }, 5 * 60 * 1000); // 5 phút
+    }
+
+    ['mousemove', 'keypress', 'click', 'scroll'].forEach(event => {
+      window.addEventListener(event, resetIdleTimer);
+    });
+
+    resetIdleTimer();
+  </script>
+
+</body>
+</html>
